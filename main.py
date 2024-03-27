@@ -1,98 +1,190 @@
-import streamlit as st
-import numpy as np
+import imp
 import pandas as pd
-from PIL import Image
-import time
-
-st.title('Streamlit 超入門')
-
-st.write('プログレスバーの表示')
-'Start'
-
-latest_iteration = st.empty()
-bar = st.progress(0)
-
-for i in range(100):
-    latest_iteration.text(f'Iteration {i+1}')
-    bar.progress(i + 1)
-    time.sleep(0.1)
-
-'Done!!!!'
-
-# st.write('DataFrame')
-
-# st.write('Interactive Widgets')
-
-# left_column, right_column = st.columns(2)
-# button = left_column.button('右カラムに文字を表示')
-# if button:
-#     right_column.write('ここは右カラムです')
-
-# expander1 = st.expander('問い合わせ1')
-# expander1.write('問い合わせ1の回答')
-# expander2 = st.expander('問い合わせ2')
-# expander2.write('問い合わせ2の回答')
-# expander3 = st.expander('問い合わせ3')
-# expander3.write('問い合わせ3の回答')
-
-
-# text = st.text_input('あなたの趣味を教えてください。')
-# 'あなたの趣味：', text
-
-# condition = st.slider('あなたの今の調子は？',0, 100, 50)
-# 'コンディション：', condition
-
-
-# text = st.sidebar.text_input('あなたの趣味を教えてください。')
-# 'あなたの趣味：', text
-
-# condition = st.sidebar.slider('あなたの今の調子は？',0, 100, 50)
-# 'コンディション：', condition
-
-
-# option = st.selectbox(
-#     'あなたが好きな数字を教えてください、',
-#     list(range(1,11))
-# )
-
-# 'あなたの好きな数字は、', option, 'です。'
-
-# if st.checkbox('Show Image'):
-#     img = Image.open('sample.png')
-#     st.image(img, caption='Sample Image', use_column_width=True)
-
-
-# df = pd.DataFrame(
-#     np.random.rand(100, 2)/[50, 50] + [35.69, 139.70],
-#     columns = ['lat', 'lon']
-# )
-
-# st.map(df)
-
-
-_ = """
-df = pd.DataFrame({
-    '1列名': [1, 2, 3, 4],
-    '2列名': [10, 20, 30, 40]
-})
-"""
-
-# 動的＝dataframe、静的＝table
-# st.dataframe(df.style.highlight_max(axis=0), width=300, height=200)
-# st.table(df.style.highlight_max(axis=0))
-
-"""
-# 章
-## 節
-### 項
-
-```python
+import yfinance as yf
+import altair as alt
 import streamlit as st
-import numpy as np
-import pandas as pd
-```
 
-"""
+st.title('株価可視化アプリ')
+
+st.sidebar.write("""
+# 株価
+こちらは株価可視化ツールです。以下のオプションから表示日数を指定してください
+""")
+
+st.sidebar.write("""
+## 表示日数選択
+""")
+
+days = st.sidebar.slider('日数', 1, 50, 20)
+
+st.write(f"""
+### 過去 **{days}日間** の株価
+""")
+
+@st.cache_data
+def get_data(days,tickers):
+    df = pd.DataFrame()
+    for company in tickers.keys():
+        tkr = yf.Ticker(tickers[company])
+        hist = tkr.history(period=f'{days}d')
+        hist.index = hist.index.strftime('%d %B %Y')
+        hist = hist[['Close']]
+        hist.columns = [company]
+        hist = hist.T
+        hist.index.name = 'Name'
+        df = pd.concat([df, hist])
+    return df
+
+try:
+    st.sidebar.write("""
+    "" 株価の範囲指定
+    """)
+
+    ymin, ymax = st.sidebar.slider(
+        '範囲の指定をしてください',
+        0.0, 3500.0, (0.0, 3500.0)
+    )
+
+    tickers = {
+        'apple':    'AAPL',
+        'google':    'GOOGL',
+        'microsoft':    'MSFT',
+        'netflix':    'NFLX',
+        'amazon':    'AMZN',
+        'facebook':    'META'
+    }
+
+    df = get_data(days, tickers)
+
+    companies =st.multiselect(
+        '会社名を選択してください',
+        list(df.index),
+        ['google','amazon','apple','microsoft','facebook']
+    )
+
+    if not companies:
+        st.error('少なくとも一社は選んでください。')
+    else:
+        data = df.loc[companies]
+        data.reset_index()
+        st.write("### 株価(USD)", data.sort_index())
+        data = data.T.reset_index()
+        data = pd.melt(data, id_vars=['Date']).rename(
+            columns={'value': 'Stock Prices(USD)'}
+        )
+        chart = (
+            alt.Chart(data)
+            .mark_line(opacity=0.8, clip=True)
+            .encode(
+                x="Date:T",
+                y=alt.Y("Stock Prices(USD):Q", stack=None, scale=alt.Scale(domain=[ymin, ymax])),
+                color='Name:N'
+            )
+        )
+        st.altair_chart(chart, use_container_width=True)
+except:
+    st.error(
+        "おっと！なにかエラーが起きているようです。"
+    )
+
+
+
+# try:
+#     st.sidebar.write("""
+#     "" 株価の範囲指定
+#     """)
+
+#     ymin, ymax = st.sidebar.slider(
+#         '範囲の指定をしてください',
+#         0.0, 3500.0, (0.0, 3500.0)
+#     )
+
+#     tickers = {
+#         'apple':    'AAPL',
+#         'google':    'GOOGL',
+#         'microsoft':    'MSFT',
+#         'netflix':    'NFLX',
+#         'amazon':    'AMZN'
+#     }
+
+#     df = get_data(days, tickers)
+
+#     companies =st.multiselect(
+#         '会社名を選択してください',
+#         list(df.index),
+#         ['google','amazon','apple']
+#     )
+
+#     if not companies:
+#         st.error('少なくとも一社は選んでください。')
+#     else:
+#         data = df.loc[companies]
+#         st.write("### 株価(USD)", data.sort_index)
+#         data = data.T.reset_index()
+#         data = pd.melt(data, id_vars=['Date']).rename(
+#             columns={'value': 'Stock Prices(USD)'}
+#         )
+#         chart = (
+#             alt.Chart(data)
+#             .mark_line(opacity=0.8, clip=True)
+#             .encode(
+#                 x="Data:T",
+#                 y=alt.Y("Stock Prices(USD):Q", stack=None, scale=alt.Chart),
+#                 color='Name:N'
+#             )
+#         )
+#         st.altair_chart(chart, use_container_width=True)
+# except:
+#     st.error(
+#         "おっと！なにかエラーが起きているようです。"
+#     )
+
+
+
+
+
+
+
+
+
+# aapl = yf.Ticker('AAPL')
+# days = 20
+# tickers = {
+#     'apple':    'AAPL',
+#     'facebook':    'FB',
+#     'google':    'GOOGL',
+#     'microsoft':    'MSFT',
+#     'netflix':    'NFLX',
+#     'amazon':    'AMZN'
+# }
+# def get_data(days,tickers):
+#     df = pd.DataFrame
+#     for company in tickers.keys():
+#         tkr = yf.Ticker(tickers[company])
+#         hist = aapl.history(period=f'{days}d')
+#         hist.index = hist.index.strftime('%d %B %Y')
+#         hist[['Close']]
+#         hist.columns = [company]
+#         hist = hist.T
+#         hist.index.name = 'Name'
+#         df = pd.concat([df, hist])
+#         hist
+
+
+
+# hist.reset_index()
+
+# hist.head(3)
+
+# hist.index = hist.index.strftime('%d %B %Y')
+
+# hist[{'Close'}]
+# hist.columns = ['apple']
+# hist = hist.T
+
+# hist.index.name = 'Name'
+
+
 
 
 
